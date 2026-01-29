@@ -1,82 +1,41 @@
-import math
-from typing import Optional,List,Tuple
+from typing import Optional,List,Tuple,Union
 from dataclasses import dataclass
 from abc import ABC,abstractmethod
-from .dictify import AutoDictify, UseDefault, enforceType, undictifyDictUnion
+from .dictify import AutoDictify, undictify, undictifyDictUnion
 
 from .utiltypes import Color
 
-class BeatgridElement(ABC):
+""" Region of constant tempo. """
+@dataclass
+class BeatgridElement:
     length: float
+    bpm: float
     bpb: int = 4 # Beats Per Bar
+    dbs: Optional[int] = None # DownBeat Set -- Changes the downbeat position to the nth beat in this grid
+    
     @staticmethod
-    def undictify(v, undictifiers=None): return undictifyDictUnion(v, "type", {
-        "const": ConstBeatgridElement, "linear": LinearBeatgridElement
-    })
+    def undictify(v, undictifiers=None): return BeatgridElement(
+        *undictify(Union[Tuple[float, float],Tuple[float, float, int],Tuple[float, float, int, int]], v, undictifiers)
+    )
+    def dictify(self, dictifiers=None):
+        if not self.dbs is None: return [self.length, self.bpm, self.bpb, self.dbs]
+        elif self.bpb != 4: return [self.length, self.bpm, self.bpb]
+        else: return [self.length, self.bpm]
+    
     """ Number of beats (can be non-integer) in this element. """
     def beat_length(self): return self.beatindex(self.length)
-    
     """ Returns a tuple of (length, beat_length) """
     def elapsed(self): return (self.length, self.beat_length())
     """ Index of beat at a position. Returns None if outside. """
-    @abstractmethod
-    def beatindex(self, pos): pass
-    """ Position of a beat at an index. Returns None if outside. """
-    @abstractmethod
-    def beatpos(self, index): pass
-
-""" Region of constant tempo. """
-@dataclass
-class ConstBeatgridElement(AutoDictify, BeatgridElement):
-    length: float
-    
-    # New attribs
-    bpm: float
-    
-    bpb: int = 4 # Beats Per Bar
-    
-    def dictify(self, dictifiers=None): return {"type": "const", **super().dictify(dictifiers)}
-    #def beat_length(self): return self.length * (self.bpm / 60.0)
-    
     def beatindex(self, pos):
         if pos < 0.0 or pos > self.length: return None
         return pos * (self.bpm / 60.0)
+    """ Position of a beat at an index. Returns None if outside. """
     def beatpos(self, index):
         if index < 0.0 or index > self.beat_length(): return None
         return index / (self.bpm / 60.0)
 
-""" Region of linearly increasing/decreasing tempo. """
-@dataclass
-class LinearBeatgridElement(AutoDictify, BeatgridElement):
-    length: float
-    
-    # New attribs
-    bpm: Tuple[float, float]
-    
-    bpb: int = 4 # Beats Per Bar
-    
-    def dictify(self, dictifiers=None): return {"type": "linear", **super().dictify(dictifiers)}
-    #def beat_length(self):
-        # Test example in Desmos:
-        # t_{elapsed}=2
-        # b_{pm}\left(t\right)=\left(1-\frac{t}{t_{elapsed}}\right)120+\left(\frac{t}{t_{elapsed}}\right)180
-        # p\left(t\right)=\frac{b_{pm}\left(t\right)}{60}
-        # b_{elapsed}=\int_{0}^{t}p\left(T\right)dT
-        # b_{total}=\int_{0}^{t_{elapsed}}p\left(T\right)dT
-        # \left(t_{elapsed}-\frac{t_{elapsed}^{2}}{2t_{elapsed}}\right)120+\left(\frac{t_{elapsed}^{2}}{2t_{elapsed}}\right)180
-        # 0.5\cdot\frac{120}{60}+0.5\cdot\frac{180}{60}
-        #return self.length * sum(self.bpm) / 120.0
-    
-    def beatindex(self, pos):
-        if pos < 0.0 or pos > self.length: return None
-        return pos * ((1.0 - pos / (2.0 * self.length)) * self.bpm[0] + (pos / (2.0 * self.length)) * self.bpm[1]) / 60.0
-    def beatpos(self, index):
-        if index < 0.0 or index > self.beat_length(): return None
-        a = (self.bpm[1] - self.bpm[0]) / (120.0*self.length)
-        b = self.bpm[0] / 60.0
-        c = -index
-        return (-b + (b**2.0 - 4.0 * a * c)**0.5) / (2.0 * a)
-
+""" A beatgrid of one or more regions of constant tempo. """
 @dataclass
 class Beatgrid:
     start: float
@@ -103,6 +62,7 @@ class Beatgrid:
             pos += el
             index -= eb
 
+""" A point or region within a song. """
 class Marker(ABC):
     name: Optional[str] = None
     color: Optional[Color] = None
@@ -116,6 +76,7 @@ class Marker(ABC):
     @abstractmethod
     def resolve(self, beatgrid): pass
 
+""" A marker tied to a particular time value. """
 @dataclass
 class TimedMarker(AutoDictify, Marker):
     position: float
@@ -128,6 +89,7 @@ class TimedMarker(AutoDictify, Marker):
     def dictify(self, dictifiers=None): return {"type": "timed", **super().dictify(dictifiers)}
     def resolve(self, beatgrid): return self.position
 
+""" A marker tied to a particular beat on the beatgrid. """
 @dataclass
 class BeatgridMarker(AutoDictify, Marker):
     beat: int
@@ -148,17 +110,12 @@ if __name__ == "__main__":
     print(Marker.undictify(d1))
     print(Marker.undictify(d2))
     
-    cb = ConstBeatgridElement(10.0, 120.0)
+    cb = BeatgridElement(10.0, 120.0)
     assert(cb.beat_length() == cb.beatindex(cb.length))
     for i in range(0, 11):
         assert(abs(cb.beatpos(cb.beatindex(i)) - i) < 0.0001)
     
-    lb = LinearBeatgridElement(10.0, [120.0, 180.0])
-    assert(lb.beat_length() == lb.beatindex(cb.length))
-    for i in range(0, 11):
-        assert(abs(lb.beatpos(lb.beatindex(i)) - i) < 0.0001)
-    
-    grid = Beatgrid(5.0, [ConstBeatgridElement(10.0, 120.0), ConstBeatgridElement(10.0, 60.0)])
+    grid = Beatgrid(5.0, [BeatgridElement(10.0, 120.0), BeatgridElement(10.0, 60.0)])
     assert(grid.beatindex(10.0) == 10.0)
     assert(grid.beatindex(20.0) == 25.0)
     assert(grid.beatindex(25.0) == 30.0)
@@ -168,11 +125,6 @@ if __name__ == "__main__":
     assert(grid.beatpos(10.0) == 10.0)
     assert(grid.beatpos(25.0) == 20.0)
     assert(grid.beatpos(30.0) == 25.0)
-    
-    for i in range(5, 26):
-        assert(grid.beatpos(grid.beatindex(i)) == i)
-    
-    grid = Beatgrid(5.0, [ConstBeatgridElement(10.0, 120.0), LinearBeatgridElement(10.0, [60.0, 120.0])])
     
     for i in range(5, 26):
         assert(grid.beatpos(grid.beatindex(i)) == i)
