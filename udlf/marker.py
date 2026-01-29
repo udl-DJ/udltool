@@ -11,14 +11,14 @@ class BeatgridElement:
     length: float
     bpm: float
     bpb: int = 4 # Beats Per Bar
-    dbs: Optional[int] = None # DownBeat Set -- Changes the downbeat position to the nth beat in this grid
+    dbs: int = 0 # DownBeat Shift -- Shifts the downbeat counter
     
     @staticmethod
     def undictify(v, undictifiers=None): return BeatgridElement(
         *undictify(Union[Tuple[float, float],Tuple[float, float, int],Tuple[float, float, int, int]], v, undictifiers)
     )
     def dictify(self, dictifiers=None):
-        if not self.dbs is None: return [self.length, self.bpm, self.bpb, self.dbs]
+        if self.dbs != 0: return [self.length, self.bpm, self.bpb, self.dbs]
         elif self.bpb != 4: return [self.length, self.bpm, self.bpb]
         else: return [self.length, self.bpm]
     
@@ -34,6 +34,55 @@ class BeatgridElement:
     def beatpos(self, index):
         if index < 0.0 or index > self.beat_length(): return None
         return index / (self.bpm / 60.0)
+
+""" Utility class for a single beat """
+@dataclass
+class Beat:
+    index: int
+    position: float
+    is_downbeat: bool
+
+""" Iterator over beats """
+class Beats:
+    beatgrid = None
+    pos: float # Position of current element
+    index: int = 0 # Beat index of iterator
+    index_sum: float = 0 # Beat index of current element
+    element_i: int = 0 # Index of current element
+    dbi: int = 0 # Downbeat index
+    def __init__(self, g):
+        self.beatgrid = g
+        self.pos = g.start
+        if len(g.elements) and not g.elements[0].dbs is None:
+            self.dbi = g.elements[0].dbs
+    def __iter__(self): return Beats(self.beatgrid)
+    def __next__(self):
+        while True:
+            element = self.beatgrid.elements[self.element_i]
+            (el, eb) = element.elapsed()
+            
+            if self.index - self.index_sum <= eb: # We're still in this element
+                beat = Beat(
+                    self.index,
+                    self.pos + element.beatpos(self.index - self.index_sum),
+                    (self.index - self.dbi) % element.bpb == 0
+                )
+                self.index += 1
+                return beat
+            
+            self.pos += el
+            self.index_sum += eb
+            
+            self.element_i += 1
+            if self.element_i >= len(self.beatgrid.elements): raise StopIteration
+            
+            # Set the downbeat index to shift into the current element
+            # If switching time signatures, this is necessary to ensure the time signature is done
+            # relative to the shift, and not relative to the start of the track
+            # Alignment is done to the LAST downbeat, so if the switch is done on an off beat, expect
+            # beat alignment to be with respect to the last downbeat of the previous region
+            self.dbi = self.index - ((self.index - self.dbi) % element.bpb) # Calculates LAST downbeat
+            self.dbi -= self.beatgrid.elements[self.element_i].dbs
 
 """ A beatgrid of one or more regions of constant tempo. """
 @dataclass
@@ -61,6 +110,8 @@ class Beatgrid:
             if index <= eb: return element.beatpos(index) + pos
             pos += el
             index -= eb
+    
+    def beats(self): return Beats(self)
 
 """ A point or region within a song. """
 class Marker(ABC):
@@ -110,12 +161,17 @@ if __name__ == "__main__":
     print(Marker.undictify(d1))
     print(Marker.undictify(d2))
     
-    cb = BeatgridElement(10.0, 120.0)
-    assert(cb.beat_length() == cb.beatindex(cb.length))
-    for i in range(0, 11):
-        assert(abs(cb.beatpos(cb.beatindex(i)) - i) < 0.0001)
+    print()
     
-    grid = Beatgrid(5.0, [BeatgridElement(10.0, 120.0), BeatgridElement(10.0, 60.0)])
+    cb = BeatgridElement(10.0, 120.0)
+    # Test for consistency
+    for i in range(0, 11):
+        assert(cb.beatpos(cb.beatindex(i)) == i)
+    
+    print()
+    
+    grid = Beatgrid(5.0, [BeatgridElement(10.0, 120.0), BeatgridElement(10.0, 60.0, 3)])
+    # Test using known values
     assert(grid.beatindex(10.0) == 10.0)
     assert(grid.beatindex(20.0) == 25.0)
     assert(grid.beatindex(25.0) == 30.0)
@@ -126,6 +182,29 @@ if __name__ == "__main__":
     assert(grid.beatpos(25.0) == 20.0)
     assert(grid.beatpos(30.0) == 25.0)
     
+    # Consistency test
     for i in range(5, 26):
         assert(grid.beatpos(grid.beatindex(i)) == i)
+    
+    for beat in grid.beats():
+        print(beat)
+    
+    print()
+    grid = Beatgrid(4.0, [BeatgridElement(4.0, 60.0), BeatgridElement(3.0, 60.0, 3), BeatgridElement(4.0, 60.0, 3, 1)])
+    for beat in grid.beats():
+        print(beat)
+    assert([*grid.beats()] == [
+        Beat(index=0, position=4.0, is_downbeat=True),
+        Beat(index=1, position=5.0, is_downbeat=False),
+        Beat(index=2, position=6.0, is_downbeat=False),
+        Beat(index=3, position=7.0, is_downbeat=False),
+        Beat(index=4, position=8.0, is_downbeat=True),
+        Beat(index=5, position=9.0, is_downbeat=False),
+        Beat(index=6, position=10.0, is_downbeat=False),
+        Beat(index=7, position=11.0, is_downbeat=True),
+        Beat(index=8, position=12.0, is_downbeat=False),
+        Beat(index=9, position=13.0, is_downbeat=True),
+        Beat(index=10, position=14.0, is_downbeat=False),
+        Beat(index=11, position=15.0, is_downbeat=False)
+    ])
 
