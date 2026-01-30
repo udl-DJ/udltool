@@ -1,5 +1,7 @@
+import math
 from typing import Optional,List,Tuple,Union
 from dataclasses import dataclass
+from enum import Enum
 from abc import ABC,abstractmethod
 from .dictify import AutoDictify, undictify, undictifyDictUnion
 
@@ -41,7 +43,13 @@ class Beat:
     index: int
     position: float
     is_downbeat: bool
-
+    """
+        Creates a beat at the given `index` and `position` inside a bar of beat length `bpb` with a downbeat position of
+        `dbi` (does not have to be nearby this beat, just needs to be *a* downbeat on the same grid as `bpb`).
+    """
+    @staticmethod
+    def create(index, bpb, dbi, position):
+        return Beat(index, position, (index - dbi) % bpb == 0)
 """ Iterator over beats """
 class Beats:
     beatgrid = None
@@ -62,10 +70,11 @@ class Beats:
             (el, eb) = element.elapsed()
             
             if self.index - self.index_sum <= eb: # We're still in this element
-                beat = Beat(
+                beat = Beat.create(
                     self.index,
-                    self.pos + element.beatpos(self.index - self.index_sum),
-                    (self.index - self.dbi) % element.bpb == 0
+                    element.bpb,
+                    self.dbi,
+                    self.pos + element.beatpos(self.index - self.index_sum)
                 )
                 self.index += 1
                 return beat
@@ -83,6 +92,73 @@ class Beats:
             # beat alignment to be with respect to the last downbeat of the previous region
             self.dbi = self.index - ((self.index - self.dbi) % element.bpb) # Calculates LAST downbeat
             self.dbi -= self.beatgrid.elements[self.element_i].dbs
+
+""" How to handle beats appearing exactly on the border between two elements """
+class BorderBeatMode(Enum):
+    """ Border beats appear in the left hand neighbor """
+    LAST = -1
+    """ Border beats appear in both bordering elements """
+    BOTH = 0
+    """ Border beats appear in right hand neighbor """
+    NEXT = 1
+""" Information about a beatgrid element """
+@dataclass
+class BeatgridElementMeta(object):
+    """ Start position of beatgrid """
+    start: float
+    """ End position of beatgrid """
+    end: float
+    """ First beat in the beatgrid """
+    firstbeat: Beat
+    """ Last beat in the beatgrid """
+    lastbeat: Beat
+    """ Downbeat Index """
+    dbi: int
+""" Iterator over beatgrid elements """
+class BeatgridElements:
+    mode: BorderBeatMode # See `elements_meta` in beatgrid
+    element_i: int = 0 # Index of current element
+    pos: float = 0.0 # Position of current element
+    index: float = 0.0 # Beat index of current element
+    dbi: int = 0 # Downbeat index
+    def __init__(self, g, mode):
+        self.beatgrid = g
+        self.mode = mode
+        self.pos = g.start
+        if len(g.elements) and not g.elements[0].dbs is None:
+            self.dbi = g.elements[0].dbs
+    def __iter__(self): return BeatgridElements(self.beatgrid, self.mode)
+    def __next__(self):
+        if self.element_i >= len(self.beatgrid.elements): raise StopIteration
+        element = self.beatgrid.elements[self.element_i]
+        (el, eb) = element.elapsed()
+        
+        is_first = self.element_i == 0
+        is_last = self.element_i == (len(self.beatgrid.elements) - 1)
+        
+        start = self.pos
+        end = self.pos + el
+        
+        fbi = int(math.ceil(self.index)) # First Beat Index
+        lbi = int(math.floor(self.index + el)) # Last Beat Index
+        self.dbi = fbi - ((self.index - fbi) % element.bpb) - element.dbs # Calculates LAST downbeat
+        
+        if not is_first and self.mode == BorderBeatMode.LAST and element.beatpos(fbi - self.index) == 0.0:
+            fbi += 1
+        firstbeat = Beat.create(fbi, element.bpb, self.dbi, self.pos + element.beatpos(fbi - self.index))
+        
+        if not is_last and self.mode == BorderBeatMode.NEXT and element.beatpos(lbi - self.index) == el:
+            lbi -= 1
+        lastbeat = Beat.create(lbi, element.bpb, self.dbi, self.pos + element.beatpos(lbi - self.index))
+        
+        # Downbeat index within the element
+        dbi = (self.dbi - fbi) % element.bpb
+        
+        self.pos += el
+        self.index += eb
+        self.element_i += 1
+        
+        return (BeatgridElementMeta(start, end, firstbeat, lastbeat, dbi), element)
 
 """ A beatgrid of one or more regions of constant tempo. """
 @dataclass
@@ -111,7 +187,9 @@ class Beatgrid:
             pos += el
             index -= eb
     
+    def beat(self, index): pass
     def beats(self): return Beats(self)
+    def elements_meta(self, mode=BorderBeatMode.NEXT): return BeatgridElements(self, mode)
 
 """ A point or region within a song. """
 class Marker(ABC):
@@ -207,4 +285,8 @@ if __name__ == "__main__":
         Beat(index=10, position=14.0, is_downbeat=False),
         Beat(index=11, position=15.0, is_downbeat=False)
     ])
+    
+    print()
+    for (meta, el) in grid.elements_meta(BorderBeatMode.NEXT):
+        print(meta)
 
