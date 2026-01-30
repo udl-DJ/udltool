@@ -9,14 +9,14 @@ from .utiltypes import Color
 
 """ Region of constant tempo. """
 @dataclass
-class BeatgridElement:
+class BeatgridRegion:
     length: float
     bpm: float
     bpb: int = 4 # Beats Per Bar
     dbs: int = 0 # DownBeat Shift -- Shifts the downbeat counter
     
     @staticmethod
-    def undictify(v, undictifiers=None): return BeatgridElement(
+    def undictify(v, undictifiers=None): return BeatgridRegion(
         *undictify(Union[Tuple[float, float],Tuple[float, float, int],Tuple[float, float, int, int]], v, undictifiers)
     )
     def dictify(self, dictifiers=None):
@@ -24,7 +24,7 @@ class BeatgridElement:
         elif self.bpb != 4: return [self.length, self.bpm, self.bpb]
         else: return [self.length, self.bpm]
     
-    """ Number of beats (can be non-integer) in this element. """
+    """ Number of beats (can be non-integer) in this region. """
     def beat_length(self): return self.beatindex(self.length)
     """ Returns a tuple of (length, beat_length) """
     def elapsed(self): return (self.length, self.beat_length())
@@ -53,28 +53,31 @@ class Beat:
 """ Iterator over beats """
 class Beats:
     beatgrid = None
-    pos: float # Position of current element
+    pos: float # Position of current region
     index: int = 0 # Beat index of iterator
-    index_sum: float = 0 # Beat index of current element
-    element_i: int = 0 # Index of current element
+    index_sum: float = 0 # Beat index of current region
+    region_i: int = 0 # Index of current region
     dbi: int = 0 # Downbeat index
     def __init__(self, g):
         self.beatgrid = g
         self.pos = g.start
-        if len(g.elements) and not g.elements[0].dbs is None:
-            self.dbi = g.elements[0].dbs
+        if len(g.regions) and not g.regions[0].dbs is None:
+            self.dbi = g.regions[0].dbs
     def __iter__(self): return Beats(self.beatgrid)
     def __next__(self):
         while True:
-            element = self.beatgrid.elements[self.element_i]
-            (el, eb) = element.elapsed()
+            region = self.beatgrid.regions[self.region_i]
+            (el, eb) = region.elapsed()
             
-            if self.index - self.index_sum <= eb: # We're still in this element
+            is_in_region = self.index - self.index_sum < eb
+            is_on_border = self.index - self.index_sum == eb
+            is_last = self.region_i == (len(self.beatgrid.regions) - 1)
+            if is_in_region or (is_on_border and is_last): # We're still in this region
                 beat = Beat.create(
                     self.index,
-                    element.bpb,
+                    region.bpb,
                     self.dbi,
-                    self.pos + element.beatpos(self.index - self.index_sum)
+                    self.pos + region.beatpos(self.index - self.index_sum)
                 )
                 self.index += 1
                 return beat
@@ -82,28 +85,20 @@ class Beats:
             self.pos += el
             self.index_sum += eb
             
-            self.element_i += 1
-            if self.element_i >= len(self.beatgrid.elements): raise StopIteration
+            self.region_i += 1
+            if self.region_i >= len(self.beatgrid.regions): raise StopIteration
             
-            # Set the downbeat index to shift into the current element
+            # Set the downbeat index to shift into the current region
             # If switching time signatures, this is necessary to ensure the time signature is done
             # relative to the shift, and not relative to the start of the track
             # Alignment is done to the LAST downbeat, so if the switch is done on an off beat, expect
             # beat alignment to be with respect to the last downbeat of the previous region
-            self.dbi = self.index - ((self.index - self.dbi) % element.bpb) # Calculates LAST downbeat
-            self.dbi -= self.beatgrid.elements[self.element_i].dbs
+            self.dbi = self.index - ((self.index - self.dbi) % region.bpb) # Calculates LAST downbeat
+            self.dbi -= self.beatgrid.regions[self.region_i].dbs
 
-""" How to handle beats appearing exactly on the border between two elements """
-class BorderBeatMode(Enum):
-    """ Border beats appear in the left hand neighbor """
-    LAST = -1
-    """ Border beats appear in both bordering elements """
-    BOTH = 0
-    """ Border beats appear in right hand neighbor """
-    NEXT = 1
-""" Information about a beatgrid element """
+""" Information about a beatgrid region """
 @dataclass
-class BeatgridElementMeta(object):
+class BeatgridRegionMeta(object):
     """ Start position of beatgrid """
     start: float
     """ End position of beatgrid """
@@ -114,82 +109,78 @@ class BeatgridElementMeta(object):
     lastbeat: Beat
     """ Downbeat Index """
     dbi: int
-""" Iterator over beatgrid elements """
-class BeatgridElements:
-    mode: BorderBeatMode # See `elements_meta` in beatgrid
-    element_i: int = 0 # Index of current element
-    pos: float = 0.0 # Position of current element
-    index: float = 0.0 # Beat index of current element
+""" Iterator over beatgrid regions """
+class BeatgridRegions:
+    region_i: int = 0 # Index of current region
+    pos: float = 0.0 # Position of current region
+    index: float = 0.0 # Beat index of current region
     dbi: int = 0 # Downbeat index
-    def __init__(self, g, mode):
+    def __init__(self, g):
         self.beatgrid = g
-        self.mode = mode
         self.pos = g.start
-        if len(g.elements) and not g.elements[0].dbs is None:
-            self.dbi = g.elements[0].dbs
-    def __iter__(self): return BeatgridElements(self.beatgrid, self.mode)
+        if len(g.regions) and not g.regions[0].dbs is None:
+            self.dbi = g.regions[0].dbs
+    def __iter__(self): return BeatgridRegions(self.beatgrid)
     def __next__(self):
-        if self.element_i >= len(self.beatgrid.elements): raise StopIteration
-        element = self.beatgrid.elements[self.element_i]
-        (el, eb) = element.elapsed()
+        if self.region_i >= len(self.beatgrid.regions): raise StopIteration
+        region = self.beatgrid.regions[self.region_i]
+        (el, eb) = region.elapsed()
         
-        is_first = self.element_i == 0
-        is_last = self.element_i == (len(self.beatgrid.elements) - 1)
+        #is_first = self.region_i == 0
+        is_last = self.region_i == (len(self.beatgrid.regions) - 1)
         
         start = self.pos
         end = self.pos + el
         
         fbi = int(math.ceil(self.index)) # First Beat Index
         lbi = int(math.floor(self.index + el)) # Last Beat Index
-        self.dbi = fbi - ((self.index - fbi) % element.bpb) - element.dbs # Calculates LAST downbeat
+        self.dbi = fbi - ((self.index - fbi) % region.bpb) - region.dbs # Calculates LAST downbeat
         
-        if not is_first and self.mode == BorderBeatMode.LAST and element.beatpos(fbi - self.index) == 0.0:
-            fbi += 1
-        firstbeat = Beat.create(fbi, element.bpb, self.dbi, self.pos + element.beatpos(fbi - self.index))
+        firstbeat = Beat.create(fbi, region.bpb, self.dbi, self.pos + region.beatpos(fbi - self.index))
         
-        if not is_last and self.mode == BorderBeatMode.NEXT and element.beatpos(lbi - self.index) == el:
-            lbi -= 1
-        lastbeat = Beat.create(lbi, element.bpb, self.dbi, self.pos + element.beatpos(lbi - self.index))
+        # Correct for beats directly on the border between two regions (always put beat in right hand region)
+        if not is_last and region.beatpos(lbi - self.index) == el: lbi -= 1
+        lastbeat = Beat.create(lbi, region.bpb, self.dbi, self.pos + region.beatpos(lbi - self.index))
         
-        # Downbeat index within the element
-        dbi = (self.dbi - fbi) % element.bpb
+        # Downbeat index within the region
+        dbi = (self.dbi - fbi) % region.bpb
         
         self.pos += el
         self.index += eb
-        self.element_i += 1
+        self.region_i += 1
         
-        return (BeatgridElementMeta(start, end, firstbeat, lastbeat, dbi), element)
+        return (BeatgridRegionMeta(start, end, firstbeat, lastbeat, dbi), region)
 
 """ A beatgrid of one or more regions of constant tempo. """
 @dataclass
 class Beatgrid:
     start: float
-    elements: List[BeatgridElement]
+    regions: List[BeatgridRegion]
     
     """ Index of beat at a position. Returns None if outside. """
     def beatindex(self, pos):
         pos -= self.start
         if pos < 0.0: return None
         index = 0.0
-        for element in self.elements:
-            (el, eb) = element.elapsed()
-            if pos <= el: return index + element.beatindex(pos)
-            index += element.beat_length()
-            pos -= element.length
+        for region in self.regions:
+            (el, eb) = region.elapsed()
+            if pos <= el: return index + region.beatindex(pos)
+            index += region.beat_length()
+            pos -= region.length
         return None
     """ Position of a beat at an index. Returns None if outside. """
     def beatpos(self, index):
         if index < 0.0: return None
         pos = self.start
-        for element in self.elements:
-            (el, eb) = element.elapsed()
-            if index <= eb: return element.beatpos(index) + pos
+        for region in self.regions:
+            (el, eb) = region.elapsed()
+            if index <= eb: return region.beatpos(index) + pos
             pos += el
             index -= eb
     
     def beat(self, index): pass
     def beats(self): return Beats(self)
-    def elements_meta(self, mode=BorderBeatMode.NEXT): return BeatgridElements(self, mode)
+    def regions_meta(self): return BeatgridRegions(self)
 
 """ A point or region within a song. """
 class Marker(ABC):
@@ -241,14 +232,14 @@ if __name__ == "__main__":
     
     print()
     
-    cb = BeatgridElement(10.0, 120.0)
+    cb = BeatgridRegion(10.0, 120.0)
     # Test for consistency
     for i in range(0, 11):
         assert(cb.beatpos(cb.beatindex(i)) == i)
     
     print()
     
-    grid = Beatgrid(5.0, [BeatgridElement(10.0, 120.0), BeatgridElement(10.0, 60.0, 3)])
+    grid = Beatgrid(5.0, [BeatgridRegion(10.0, 120.0), BeatgridRegion(10.0, 60.0, 3)])
     # Test using known values
     assert(grid.beatindex(10.0) == 10.0)
     assert(grid.beatindex(20.0) == 25.0)
@@ -268,7 +259,7 @@ if __name__ == "__main__":
         print(beat)
     
     print()
-    grid = Beatgrid(4.0, [BeatgridElement(4.0, 60.0), BeatgridElement(3.0, 60.0, 3), BeatgridElement(4.0, 60.0, 3, 1)])
+    grid = Beatgrid(4.0, [BeatgridRegion(4.0, 60.0), BeatgridRegion(3.0, 60.0, 3), BeatgridRegion(4.0, 60.0, 3, 1)])
     for beat in grid.beats():
         print(beat)
     assert([*grid.beats()] == [
@@ -279,7 +270,7 @@ if __name__ == "__main__":
         Beat(index=4, position=8.0, is_downbeat=True),
         Beat(index=5, position=9.0, is_downbeat=False),
         Beat(index=6, position=10.0, is_downbeat=False),
-        Beat(index=7, position=11.0, is_downbeat=True),
+        Beat(index=7, position=11.0, is_downbeat=False),
         Beat(index=8, position=12.0, is_downbeat=False),
         Beat(index=9, position=13.0, is_downbeat=True),
         Beat(index=10, position=14.0, is_downbeat=False),
@@ -287,6 +278,6 @@ if __name__ == "__main__":
     ])
     
     print()
-    for (meta, el) in grid.elements_meta(BorderBeatMode.NEXT):
+    for (meta, el) in grid.regions_meta():
         print(meta)
 
