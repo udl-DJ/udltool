@@ -104,9 +104,9 @@ class BeatgridRegionMeta(object):
     """ End position of beatgrid """
     end: float
     """ First beat in the beatgrid """
-    firstbeat: Beat
+    firstbeat: Optional[Beat]
     """ Last beat in the beatgrid """
-    lastbeat: Beat
+    lastbeat: Optional[Beat]
     """ Downbeat Index """
     dbi: int
 """ Iterator over beatgrid regions """
@@ -137,16 +137,24 @@ class BeatgridRegions:
         # Correct for beats directly on the border between two regions (always put beat in right hand region)
         if not is_last and region.beatpos(lbi - self.index) == el: lbi -= 1
         
-        self.dbi = fbi - ((self.index - fbi) % region.bpb) - region.dbs # Calculates LAST downbeat
-        firstbeat = Beat.create(fbi, region.bpb, self.dbi, self.pos + region.beatpos(fbi - self.index))
-        lastbeat = Beat.create(lbi, region.bpb, self.dbi, self.pos + region.beatpos(lbi - self.index))
-        
         # Downbeat index within the region
         dbi = (self.dbi - fbi) % region.bpb
+        
+        if fbi - self.index >= eb:
+            firstbeat = None
+            lastbeat = None
+            dbi = 0
+        else:
+            firstbeat = Beat.create(fbi, region.bpb, self.dbi, self.pos + region.beatpos(fbi - self.index))
+            lastbeat = Beat.create(lbi, region.bpb, self.dbi, self.pos + region.beatpos(lbi - self.index))
         
         self.pos += el
         self.index += eb
         self.region_i += 1
+        
+        if not is_last:
+            self.dbi = (lbi+1) - (((lbi+1) - self.dbi) % region.bpb)
+            self.dbi -= self.beatgrid.regions[self.region_i].dbs
         
         return (BeatgridRegionMeta(start, end, firstbeat, lastbeat, dbi), region)
 
@@ -289,5 +297,24 @@ if __name__ == "__main__":
         BeatgridRegionMeta(start=7.5, end=9.5, dbi=2,
             firstbeat=Beat(index=7, position=7.5, is_downbeat=False),
             lastbeat=Beat(index=11, position=9.5, is_downbeat=False))
+    ])
+    
+    print()
+    grid = Beatgrid(4.0, [BeatgridRegion(1.0, 120.0), BeatgridRegion(0.75, 120.0), BeatgridRegion(0.125, 120.0), BeatgridRegion(0.375, 120.0)])
+    for beat in grid.beats():
+        print(beat)
+    for (meta, el) in grid.regions_meta():
+        print(meta)
+    assert([meta for (meta, el) in grid.regions_meta()] == [
+        BeatgridRegionMeta(start=4.0, end=5.0, dbi=0,
+            firstbeat=Beat(index=0, position=4.0, is_downbeat=True),
+            lastbeat=Beat(index=1, position=4.5, is_downbeat=False)),
+        BeatgridRegionMeta(start=5.0, end=5.75, dbi=2,
+            firstbeat=Beat(index=2, position=5.0, is_downbeat=False),
+            lastbeat=Beat(index=3, position=5.5, is_downbeat=False)),
+        BeatgridRegionMeta(start=5.75, end=5.875, firstbeat=None, lastbeat=None, dbi=0),
+        BeatgridRegionMeta(start=5.875, end=6.25, dbi=0,
+            firstbeat=Beat(index=4, position=6.0, is_downbeat=True),
+            lastbeat=Beat(index=4, position=6.0, is_downbeat=True))
     ])
 
