@@ -53,7 +53,7 @@ class TrackInfo(UDL_ID3):
     
     def getmarkers(self, name):
         markers = self[f"markers/{name}"]
-        return undictify(List[Optional[Marker]], markers)
+        return [] if markers is None else undictify(List[Optional[Marker]], markers)
     def setmarkers(self, name, markers):
         if not isinstance(markers, list): raise ValueError('Not a list')
         for marker in markers:

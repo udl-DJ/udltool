@@ -232,7 +232,7 @@ class Marker(ABC):
         "timed": TimedMarker, "beatgrid": BeatgridMarker
     })
     """
-        Find the position (in seconds) of a marker on a beatgrid. The beatgrid may be None,
+        Find the position and length (in seconds) of a marker on a beatgrid. The beatgrid may be None,
         in which case the return value may also be None if the marker can't be resolved without
         a beatgrid present.
     """
@@ -250,7 +250,8 @@ class TimedMarker(AutoDictify, Marker):
     
     def absolute(self): return True
     def dictify(self, dictifiers=None): return {"type": "timed", **super().dictify(dictifiers)}
-    def resolve(self, beatgrid): return self.position
+    def resolve(self, beatgrid):
+        return (self.position, self.position + self.length if self.length else None)
 
 """ A marker tied to a particular beat on the beatgrid. """
 @dataclass
@@ -263,7 +264,9 @@ class BeatgridMarker(AutoDictify, Marker):
     
     def absolute(self): return False
     def dictify(self, dictifiers=None): return {"type": "beatgrid", **super().dictify(dictifiers)}
-    def resolve(self, beatgrid): return None if beatgrid is None else beatgrid.beatpos(self.beat)
+    def resolve(self, beatgrid):
+        if not beatgrid is None: return None
+        return (beatgrid.beatpos(self.beat), beatgrid.beatpos(self.beat + self.beats) if self.beats else None)
 
 if __name__ == "__main__":
     d1 = TimedMarker(1.0, name='Hotcue 1', color=Color(255,0,0)).dictify()

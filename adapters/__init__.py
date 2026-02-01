@@ -1,5 +1,7 @@
 from . import mixxx
+from . import rekordbox_xml
 
 ADAPTERS = {
-    'mixxx': mixxx
+    'mixxx': mixxx,
+    'rekordbox-xml': rekordbox_xml
 }

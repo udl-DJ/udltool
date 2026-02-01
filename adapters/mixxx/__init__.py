@@ -13,7 +13,7 @@ from udlf.utiltypes import Color
 logger = logging.getLogger(__name__)
 
 NAME = "Mixxx"
-DESC = "Connects you Mixxx (https://mixxx.org/) library database to UDL."
+DESC = "Connects your Mixxx (https://mixxx.org/) library database to UDL."
 
 def get_one(gen, warning = None):
     res = None

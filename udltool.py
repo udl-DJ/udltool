@@ -3,6 +3,7 @@ import argparse
 import logging
 from commands import COMMANDS
 from util.library import Library
+from util.info import NAME,DESC,VERSION
 
 class CustomFormatter(logging.Formatter):
     cyan = "\x1b[36;20m"
@@ -31,10 +32,6 @@ logger = logging.getLogger(__name__)
 log_handler = logging.StreamHandler(sys.stdout)
 log_handler.setFormatter(CustomFormatter())
 logging.getLogger().addHandler(log_handler)
-
-NAME = 'udltool'
-DESC = 'A tool for managing a DJ library in UDL (Universal DJ Library) format.'
-VERSION = '0.1.0a'
 
 parser = argparse.ArgumentParser(prog=NAME, description=DESC, epilog=f'Version {VERSION}')
 
