@@ -231,7 +231,11 @@ class Marker(ABC):
     def undictify(v, undictifiers=None): return undictifyDictUnion(v, "type", {
         "timed": TimedMarker, "beatgrid": BeatgridMarker
     })
-    """ Find the position (in seconds) of a marker on a beatgrid. """
+    """
+        Find the position (in seconds) of a marker on a beatgrid. The beatgrid may be None,
+        in which case the return value may also be None if the marker can't be resolved without
+        a beatgrid present.
+    """
     @abstractmethod
     def resolve(self, beatgrid): pass
 
@@ -259,7 +263,7 @@ class BeatgridMarker(AutoDictify, Marker):
     
     def absolute(self): return False
     def dictify(self, dictifiers=None): return {"type": "beatgrid", **super().dictify(dictifiers)}
-    def resolve(self, beatgrid): return beatgrid.beatpos(self.beat)
+    def resolve(self, beatgrid): return None if beatgrid is None else beatgrid.beatpos(self.beat)
 
 if __name__ == "__main__":
     d1 = TimedMarker(1.0, name='Hotcue 1', color=Color(255,0,0)).dictify()

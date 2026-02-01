@@ -1,0 +1,68 @@
+/**
+  * Mixxx 2.7-alpha, Digital DJ'ing software.
+  * Copyright (C) 2001-2025 Mixxx Development Team
+  * 
+  * Mixxx is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License as published by
+  * the Free Software Foundation; either version 2 of the License, or
+  * (at your option) any later version. The full text of the GNU
+  * General Public License, version 2 can be found below. The licenses
+  * of software libraries distributed together with Mixxx can be found
+  * below as well.
+  * 
+  * Mixxx is distributed in the hope that it will be useful,
+  * but WITHOUT ANY WARRANTY; without even the implied warranty of
+  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  * 
+  * This distribution of Mixxx may include skins that are licensed under a
+  * Creative Commons license. Full licensing information is available
+  * individually for each skin, located in their "skin.xml" file.
+  * 
+  * Depending on your platform, you may receive a copy of PortAudio
+  * (http://www.portaudio.com/) which is distributed under the
+  * PortAudio as-is license which can be found on their website.
+  * 
+  * This may also be in turn compiled with ASIO support, which is provided
+  * by the Steinberg ASIO SDK. The Steinberg ASIO SDK and Steinberg VST
+  * PlugIn SDK are Copyright Steinberg Media Technologies GmbH. ASIO and VST
+  * are trademarks of Steinberg Media Technologies GmbH. The license is
+  * available at http://www.steinberg.net/en/company/developer.html .
+  * 
+  * On Windows you may receive a copy of the Microsoft Visual Studio runtime
+  * libraries. These are distributed only for the purpose of allowing
+  * Mixxx to run as per the license agreement for Visual Studio and
+  * are copyright of Microsoft.
+  */
+
+syntax = "proto2";
+
+package mixxx.track.io;
+
+option optimize_for = LITE_RUNTIME;
+
+enum Source {
+  ANALYZER = 0;
+  FILE_METADATA = 1;
+  USER = 2;
+}
+
+message Beat {
+  optional int32 frame_position = 1;
+  optional bool enabled = 2 [ default = true ];
+  optional Source source = 3 [ default = ANALYZER ];
+}
+
+message Bpm {
+  optional double bpm = 1;
+  optional Source source = 2 [ default = ANALYZER ];
+}
+
+message BeatMap {
+  repeated Beat beat = 1;
+}
+
+message BeatGrid {
+  optional Bpm bpm = 1;
+  optional Beat first_beat = 2;
+}
+
