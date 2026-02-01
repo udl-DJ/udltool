@@ -133,7 +133,7 @@ class Connection:
                 f'Found more than one main loop in {location}'
             )
             hotcues = {t[0]: t[1] for t in self.read_cues(track_id, CUE_HOT, samplerate, n_channels)}
-            cuerange = range(0, max(hotcues.keys())) if len(hotcues.keys()) else []
+            cuerange = range(0, max(hotcues.keys())+1) if len(hotcues.keys()) else []
             hotcues = [hotcues[i] if i in hotcues else None for i in cuerange]
 
             if maincue: ti.setcuepoint(maincue)

@@ -37,7 +37,7 @@ def save_track_info(rk_track, udl_track):
                 Inizio=meta.start,
                 Bpm=el.bpm,
                 Metro=f'{el.bpb}/4',
-                Battito=el.bpb-meta.dbi
+                Battito=meta.dbi+1
             )
     
     maincue = udl_track.getcuepoint()
