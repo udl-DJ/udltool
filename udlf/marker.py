@@ -7,15 +7,21 @@ from abc import ABC,abstractmethod
 from .dictify import AutoDictify, undictify, undictifyDictUnion
 
 from .utiltypes import Color
+from .utiltypes import CompareContext as cc
 
 """ Region of constant tempo. """
 @dataclass
 class BeatgridRegion:
+    """ Start position in seconds """
     start: float
+    """ Beats per minute in this region """
     bpm: float
-    length: int # Length in beats
-    fbi: int # First Beat Index -- Index of first beat in this region within a bar
-    bpb: int = 4 # Beats Per Bar
+    """ Length in beats """
+    length: int
+    """ First Beat Index -- Index of first beat in this region relative to the current bar """
+    fbi: int
+    """ Beats Per Bar; Zero indicates no downbeats reported and `fbi` is meaningless """
+    bpb: int = 4
     
     @staticmethod
     def undictify(v, undictifiers=None): return BeatgridRegion(*undictify(Union[
@@ -224,55 +230,28 @@ class Beatgrid(AutoDictify):
         ])
 
 """ A point or region within a song. """
-class Marker(ABC):
-    name: Optional[str] = None
-    color: Optional[Color] = None
-    @abstractmethod
-    def absolute(self): pass
-    @staticmethod
-    def undictify(v, undictifiers=None): return undictifyDictUnion(v, "type", {
-        "timed": TimedMarker, "beatgrid": BeatgridMarker
-    })
-    """
-        Find the position and length (in seconds) of a marker on a beatgrid. The beatgrid may be None,
-        in which case the return value may also be None if the marker can't be resolved without
-        a beatgrid present.
-    """
-    @abstractmethod
-    def resolve(self, beatgrid): pass
-
-""" A marker tied to a particular time value. """
 @dataclass
-class TimedMarker(AutoDictify, Marker):
+class Marker(AutoDictify):
+    """ Location of the marker in seconds """
     position: float
+    """ Length of the marker in seconds, or None if the marker is a single point """
     length: Optional[float] = None
-    # Workaround https://stackoverflow.com/a/53085935
+    """ If true, the marker is locked to the beatgrid (and updates should shift its position) """
+    locked: bool = False
+    """ Label of the marker """
     name: Optional[str] = None
+    """ Color of the marker displayed in UIs """
     color: Optional[Color] = None
-    
-    def absolute(self): return True
-    def dictify(self, dictifiers=None): return {"type": "timed", **super().dictify(dictifiers)}
-    def resolve(self, beatgrid):
-        return (self.position, self.position + self.length if self.length else None)
-
-""" A marker tied to a particular beat on the beatgrid. """
-@dataclass
-class BeatgridMarker(AutoDictify, Marker):
-    beat: int
-    beats: Optional[int] = None
-    # Workaround https://stackoverflow.com/a/53085935
-    name: Optional[str] = None
-    color: Optional[Color] = None
-    
-    def absolute(self): return False
-    def dictify(self, dictifiers=None): return {"type": "beatgrid", **super().dictify(dictifiers)}
-    def resolve(self, beatgrid):
-        if not beatgrid is None: return None
-        return (beatgrid.beatpos(self.beat), beatgrid.beatpos(self.beat + self.beats) if self.beats else None)
+    def __eq__(self, other):
+        return (
+            cc.time_eq(self.position, other.position) and cc.time_eq(self.length, other.length) and
+            cc.meta_eq(self.locked, other.locked) and cc.meta_eq(self.name, other.name) and
+            cc.meta_eq(self.color, other.color)
+        )
 
 if __name__ == "__main__":
-    d1 = TimedMarker(1.0, name='Hotcue 1', color=Color(255,0,0)).dictify()
-    d2 = BeatgridMarker(1, name='Hotcue 2', color=Color(0,255,0)).dictify()
+    d1 = Marker(1.0, name='Hotcue 1', color=Color(255,0,0)).dictify()
+    d2 = Marker(2.0, name='Hotcue 2', locked=True, color=Color(0,255,0)).dictify()
     print(d1)
     print(d2)
     print(Marker.undictify(d1))
