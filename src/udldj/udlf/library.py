@@ -6,12 +6,14 @@ from mutagen.id3 import ID3
 from mutagen.id3._util import ID3NoHeaderError
 
 from .id3 import UDL_ID3
-from .dictify import dictify,undictify
+from ..util.dictify import dictify,undictify
 from .marker import Beatgrid,Marker
+
+from util.library import BaseTrackInfo
 
 class UnknownFormatError(ValueError): pass
 
-class TrackInfo(UDL_ID3):
+class TrackInfo(UDL_ID3, BaseTrackInfo):
     def __init__(self, track_location, tags = None):
         if tags is None: tags = ID3()
         super().__init__(tags)
@@ -72,3 +74,27 @@ class TrackInfo(UDL_ID3):
     def setloops(self, cues): self.setmarkers("loop", cues)
     def getphrases(self): return self.getmarkers("phrase")
     def setphrases(self, cues): self.setmarkers("phrase", cues)
+
+@dataclass
+class Library:
+    paths: List[str]
+
+    def __init__(self, paths = []):
+        if len(paths) == 0: paths = ['.']
+        self.paths = [os.path.abspath(p) for p in paths]
+    
+    def __iter__(self):
+        for path in self.paths:
+            for root, dirs, files in os.walk(path):
+                if any(root.endswith(s) for s in IGNORE_FILES): continue
+                for file in files:
+                    if file.startswith('.'): continue
+                    if any(file.endswith(s) for s in IGNORE_FILES): continue
+
+                    track_path = os.path.join(root, file)
+                    try:
+                        yield TrackInfo.load(track_path)
+                    except UnknownFormatError:
+                        logger.error(f'Unknown file format for {track_path}')
+                    except Exception as e:
+                        logger.exception(f'Could not process track {track_path}')

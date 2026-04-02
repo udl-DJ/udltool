@@ -6,7 +6,8 @@ import struct
 import itertools
 
 from . import beats_pb2
-from udlf.marker import Marker, Beatgrid, BeatgridRegion
+from udlf.marker import Marker
+from udlf.beatgrid import Beatgrid, BeatgridRegion
 from udlf.utiltypes import Color
 
 from udlf.baselibrary import BaseTrackInfo, BaseLibrary

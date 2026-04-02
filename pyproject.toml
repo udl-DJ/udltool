@@ -1,0 +1,24 @@
+[project]
+name = "udldj"
+version = "0.0.1"
+authors = [
+  { name="Nathan Pennie", email="kb1rd@kb1rd.net" },
+]
+description = "A universal DJ library format and loader (WIP)."
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "GPL-3.0"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Homepage = "https://github.com/udl-DJ/udltool"
+Issues = "https://github.com/udl-DJ/udltool/issues"
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]

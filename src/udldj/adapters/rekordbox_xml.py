@@ -32,7 +32,7 @@ def save_track_info(rk_track, udl_track):
     beatgrid = udl_track.getbeatgrid()
     if not beatgrid is None and len(beatgrid.regions):
         rk_track.tempos = []
-        for (meta, el) in beatgrid.regions_meta():
+        for (meta, el) in beatgrid.meta():
             rk_track.add_tempo(
                 Inizio=meta.start,
                 Bpm=el.bpm,

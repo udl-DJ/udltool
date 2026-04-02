@@ -61,6 +61,8 @@ class BaseMarkerSet:
         for (s, o) in zip(self, other):
             if not s == o: return False
         return True
+    def __str__(self): return 'MarkerSet(' + ', '.join((str(m) for m in self)) + ')'
+    def __repr__(self): return self.__str__()
 
 # Utility functions for generating getters
 def _loadfn(name): return lambda self: getattr(self, 'load'+name)()
