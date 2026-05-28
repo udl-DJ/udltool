@@ -3,6 +3,11 @@ from typing import Tuple, Optional
 
 from ..util.dictify import undictify
 
+def parsehex_16bit(digits):
+    assert(len(digits) < 3)
+    n = int(digits, 16)
+    return n * 0x11 if len(digits) == 1 else n
+
 @dataclass
 class Color:
     R: int
@@ -11,6 +16,15 @@ class Color:
     def dictify(self, dictifiers=None): return [self.R, self.G, self.B]
     @staticmethod
     def undictify(v, undictifiers=None): return Color(*undictify(Tuple[int,int,int], v, undictifiers))
+    @staticmethod
+    def fromhex(hexstr):
+        if not type(hexstr) is str: raise ValueError('Not a string')
+        if len(hexstr) == 6:
+            return Color(*[parsehex_16bit(s) for s in [hexstr[0:2], hexstr[2:4], hexstr[4:6]]])
+        elif len(hexstr) == 3:
+            return Color(*[parsehex_16bit(s) for s in [hexstr[0:1], hexstr[1:2], hexstr[3:4]]])
+        else: raise ValueError('Invalid number of hex digits')
+    def tohex(self): return f'{self.R:02x}{self.G:02x}{self.B:02x}'
 
 def _maxtol(a, b):
     if a is None: return b

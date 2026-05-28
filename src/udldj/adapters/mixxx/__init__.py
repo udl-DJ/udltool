@@ -6,11 +6,11 @@ import struct
 import itertools
 
 from . import beats_pb2
-from udlf.marker import Marker
-from udlf.beatgrid import Beatgrid, BeatgridRegion
-from udlf.utiltypes import Color
+from udldj.udlf.marker import Marker
+from udldj.udlf.beatgrid import Beatgrid, BeatgridRegion
+from udldj.udlf.utiltypes import Color
 
-from udlf.baselibrary import BaseTrackInfo, BaseLibrary
+from udldj.udlf.baselibrary import BaseTrackInfo, BaseLibrary
 
 # ---------- MISC SETUP ----------- #
 
